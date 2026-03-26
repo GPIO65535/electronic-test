@@ -4,28 +4,20 @@ volatile uint8_t g_flag_speed = 0;
 
 int main(void)
 {
-    // ALL_Init();
-    // Timer_Init();
-    uint8_t key_num = 0;
+     ALL_Init();
+     Timer_Init();
+     OLED_Init();
 
-    LED_Init();
-    Key_Init();
-    OLED_Init();
-
-    LED1_SET(0);
-    OLED_Clear();
-    OLED_ShowString(1,1,"KEY1:WAIT");
-    OLED_ShowString(2,1,"LED1:OFF ");
+     OLED_ShowString(1, 1, "R:");
+     OLED_ShowString(2, 1, "P:");
+     OLED_ShowString(3, 1, "Y:");
 
     while(1)
     {
-        key_num = KEY_GET();
-        if(key_num == 1)
-        {
-            LED1_SET(1);
-            OLED_ShowString(1,1,"KEY1:PRESS");
-            OLED_ShowString(2,1,"LED1:ON  ");
-        }
+        OLED_ShowFNum(1, 3, Roll, 5, 2);
+        OLED_ShowFNum(2, 3, Pitch, 5, 2);
+        OLED_ShowFNum(3, 3, Yaw, 5, 2);
+  
         // if(g_flag_turn)
         // {
         //     g_flag_turn=0;
