@@ -292,11 +292,45 @@ void PID_Speed(void)
     //速度低通滤波
     g_speed_filt=alpha*v+(1-alpha)*g_speed_filt;
 
-    // 完美跑完一圈时的代码：砍掉所有花里胡哨的目标速度干预，完全靠重心自然前倾！
-    PID_speedstruct.target = 0.0f; 
+    // ----- 定点停车状态机（里程+寻线双重判断） -----
+    static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=准备阶段(寻找B线), 2=刹车停稳阶段
+    static uint8_t g_line_lock = 0;
+    #define STOP_ARM_DIST 28700.0f // 【此处须实测微调】跑完大半圈，未到B线之前的里程数
+
+    g_lap_dist += AbsF(v);
+
+    if (g_gray_cnt < 4) {
+        g_line_lock = 0; // 离开黑线解除锁死
+    }
+
+    if (g_stop_state == 0) {
+        if (g_lap_dist > STOP_ARM_DIST) {
+            g_stop_state = 1; // 里程已满，进入寻找B线状态
+        }
+    } else if (g_stop_state == 1) {
+        // 如果处于武装状态，且检测到极多黑线（压到B号横线，7个以上灯变黑）
+        if (g_gray_cnt >= 7 && !g_line_lock) {
+            g_line_lock = 1;
+            g_stop_state = 2; // 看到B线，触发彻底停车
+        }
+    }
+
+    if (g_stop_state == 2) {
+        // 触发停车后，把刹车力度放软，防止停下后由于kp过大导致前后剧烈摇晃摆动
+        PID_speedstruct.kp = 0.2f; 
+        PID_speedstruct.ki = 0.005f;
+        PID_speedstruct.target = 0.0f; 
+        PID_speedstruct.integral *= 0.8f; // 快速消耗掉跑圈时累积的历史积分，防止停下时被历史力矩来回拉扯
+    } else {
+        // 没到停车线时，维持你这个「完美一圈」极其平滑微弱的自然参数
+        PID_speedstruct.kp = 0.15f; 
+        PID_speedstruct.ki = 0.15f/200.0f;
+        PID_speedstruct.target = g_base_v_ref; // 恢复全时目标速！不搞任何花哨的弯道减速！
+    }
+    // ---------------------------------------------
+
     PID_speedstruct.actual = g_speed_filt;
     
-    // 【全场MVP代码】：完美跑一圈时最关键的积分限幅！防止弯道差速造成积分负向死锁（消除所有倒车情况）
     PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 100.0f);
     
     float pid_output=PID_Cal(&PID_speedstruct,DT_SPEED);// dt使用实际控制周期
