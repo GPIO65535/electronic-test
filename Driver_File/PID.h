@@ -22,13 +22,14 @@ typedef struct
 
 
 
-#define LINE_IS_LOW 1 //1:ºÚÏßµÍµçÆ½ÓĞĞ§ 
-#define DT_UP      0.005f   // Ö±Á¢»·ÖÜÆÚ 5ms
-#define DT_SPEED   0.020f   // ËÙ¶È»·ÖÜÆÚ 20ms
-#define DT_TURN    0.010f   // ×ªÏò»·ÖÜÆÚ 10ms
+#define LINE_IS_LOW 1 //1:å·¡çº¿ä½ç”µå¹³æœ‰æ•ˆ 
+#define DT_UP      0.005f   // ç›´ç«‹ç¯å‘¨æœŸ 5ms
+#define DT_SPEED   0.020f   // é€Ÿåº¦ç¯å‘¨æœŸ 20ms
+#define DT_TURN    0.010f   // è½¬å‘ç¯å‘¨æœŸ 10ms
 
 extern volatile uint8_t g_flag_turn;
 extern volatile uint8_t g_flag_speed;
+extern float g_speed_filt;
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);
@@ -39,4 +40,6 @@ void PID_Up_UpdateDt(float dt);
 void PID_Up(void);
 void PID_Speed(void);
 void PID_Turn(void);
+void PID_SetBaseSpeedRef(float v_ref);
 #endif
+
