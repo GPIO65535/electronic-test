@@ -292,46 +292,49 @@ void PID_Speed(void)
     //速度低通滤波
     g_speed_filt=alpha*v+(1-alpha)*g_speed_filt;
 
-    // ----- 定点停车状态机（里程+寻线双重判断） -----
-    static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=准备阶段(寻找B线), 2=刹车停稳阶段
-    static uint8_t g_line_lock = 0;
-    #define STOP_ARM_DIST 28700.0f // 【此处须实测微调】跑完大半圈，未到B线之前的里程数
+    // ----- 定点停车状态机（纯里程判断） -----
+    static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=减速滑行, 2=彻底刹停
+    #define STOP_COAST_DIST 28000.0f // 【需微调】开始减速滑行的里程
+    #define STOP_TARGET_DIST 30300.0f // 【需微调】彻底停车的目标里程
 
     g_lap_dist += AbsF(v);
 
-    if (g_gray_cnt < 4) {
-        g_line_lock = 0; // 离开黑线解除锁死
-    }
-
     if (g_stop_state == 0) {
-        if (g_lap_dist > STOP_ARM_DIST) {
-            g_stop_state = 1; // 里程已满，进入寻找B线状态
+        if (g_lap_dist > STOP_COAST_DIST) {
+            g_stop_state = 1; // 里程达到减速点，开始滑行缓冲
         }
-    } else if (g_stop_state == 1) {
-        // 如果处于武装状态，且检测到极多黑线（压到B号横线，7个以上灯变黑）
-        if (g_gray_cnt >= 7 && !g_line_lock) {
-            g_line_lock = 1;
-            g_stop_state = 2; // 看到B线，触发彻底停车
+    }
+    if (g_stop_state == 1) {
+        if (g_lap_dist > STOP_TARGET_DIST) {
+            g_stop_state = 2; // 达到最终里程，触发彻底停车
         }
     }
 
     if (g_stop_state == 2) {
-        // 触发停车后，把刹车力度放软，防止停下后由于kp过大导致前后剧烈摇晃摆动
-        PID_speedstruct.kp = 0.2f; 
-        PID_speedstruct.ki = 0.005f;
+        // 1. 停车状态：提供刹车参数，目标速度归零
+        PID_speedstruct.kp = 0.4f; 
+        PID_speedstruct.ki = 0.01f;
         PID_speedstruct.target = 0.0f; 
-        PID_speedstruct.integral *= 0.8f; // 快速消耗掉跑圈时累积的历史积分，防止停下时被历史力矩来回拉扯
-    } else {
-        // 没到停车线时，维持你这个「完美一圈」极其平滑微弱的自然参数
+        // 2. 解开负向死锁封印，允许积攒强大的后倾刹车力
+        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -90.0f, 15.0f);
+    } else if (g_stop_state == 1) {
+        // 【纯里程滑行】：在距离终点还有一段距离时，提前把目标速度降到龟速
+        // 利用滑行减弱动能缓冲，到达目标里程瞬间就能稳稳停住，防止冲出去
         PID_speedstruct.kp = 0.15f; 
         PID_speedstruct.ki = 0.15f/200.0f;
-        PID_speedstruct.target = g_base_v_ref; // 恢复全时目标速！不搞任何花哨的弯道减速！
+        PID_speedstruct.target = 1.0f; // 龟速滑行 (如果还是太快可以改 0.5f，如果起步冲，滑行速度别太高)
+        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
+    } else {
+        // 1. 跑圈状态：维持微弱平顺参数，目标速度接回基础速度
+        PID_speedstruct.kp = 0.15f; 
+        PID_speedstruct.ki = 0.15f/200.0f;
+        PID_speedstruct.target = g_base_v_ref; 
+        // 2. 维持原来的防倒车死锁
+        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -10.0f, 15.0f);
     }
     // ---------------------------------------------
 
     PID_speedstruct.actual = g_speed_filt;
-    
-    PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 100.0f);
     
     float pid_output=PID_Cal(&PID_speedstruct,DT_SPEED);// dt使用实际控制周期
     
@@ -346,9 +349,9 @@ void PID_Turn(void)
     static float e_line = 0.0f; // 增加低通滤波防止抖动
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=2.2f;   // 因为设置了定速，1.5转不过来，增加到2.2增加转弯力度（且由于Kd降低了，在直线上也不会抽搐）
+        PID_turnstruct.kp=3.0f;   // 因为设置了定速，1.5转不过来，增加到2.2增加转弯力度（且由于Kd降低了，在直线上也不会抽搐）
         PID_turnstruct.ki=0.0f;
-        PID_turnstruct.kd=0.08f;  
+        PID_turnstruct.kd=0.15f;  
         PID_turnstruct.target=0.0f;
         PID_turnstruct.actual=0.0f;
         PID_turnstruct.error=0.0f;
