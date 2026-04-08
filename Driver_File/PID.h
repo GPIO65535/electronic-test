@@ -30,6 +30,9 @@ typedef struct
 extern volatile uint8_t g_flag_turn;
 extern volatile uint8_t g_flag_speed;
 extern float g_speed_filt;
+extern float g_lap_dist;
+extern float g_stop_coast_dist;
+extern float g_stop_target_dist;
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);

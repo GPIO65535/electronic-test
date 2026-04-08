@@ -142,7 +142,10 @@ void PID_Up(void)
         PID_upstruct.target=0.0f;
         PID_upstruct.actual=0.0f;
         PID_upstruct.error=0.0f;
-        PID_upstruct.last_error=0.0f;
+        
+        // 【关键】：开机第一帧时，防止因为初始last_error=0导致的微分爆发
+        PID_upstruct.last_error=g_target_pitch_from_speed - Pitch; 
+        
         PID_upstruct.integral=0.0f;
         PID_upstruct.derivative=0.0f;
         PID_upstruct.output=0.0f;
@@ -201,7 +204,7 @@ static float Get_TurnPreviewLevel(void)
 
     if(cnt==0)
     {
-        return 1.0f;
+        return 0.0f; // 也就是告诉速度环：“没啥可担心的转弯威胁，继续保持现有速度或平稳滑行”
     }
 
     e_norm=AbsF(sum/(float)cnt)/3.5f;
@@ -251,20 +254,49 @@ static float Get_Grayerror(void)
         }
     }
 
-    if(cnt==0)
+    if(cnt == 0)
     {
         g_gray_cnt = 0;
         return last_e;
     }
 
     g_gray_cnt = cnt;
-    last_e=sum/(float)cnt; // 计算平均误差并更新历史误差
+    
+    float current_e = sum / (float)cnt; 
+
+    // 检测极左和极右是否同时压线（这是判断十字路口唯一且最靠谱的标准）
+    uint8_t left_on = 0, right_on = 0;
+    #if LINE_IS_LOW  
+        if(gray[0]==0 || gray[1]==0) left_on = 1;
+        if(gray[6]==0 || gray[7]==0) right_on = 1;
+    #else        
+        if(gray[0]==1 || gray[1]==1) left_on = 1;
+        if(gray[6]==1 || gray[7]==1) right_on = 1;
+    #endif
+
+    if (left_on && right_on) {
+        // 1. 完全压入十字路口：直接认定为0偏差（强制直走）
+        current_e = 0.0f; 
+    } 
+    else {
+        // 2. 正常巡线或者即将进入/离开十字路口的情况
+        // 限制跳变幅度防抖，避免斜切入十字时某一侧探头先摸到横线导致单边剧烈拉飘
+        if (current_e - last_e > 1.5f) {
+            current_e = last_e + 1.5f; 
+        } else if (current_e - last_e < -1.5f) {
+            current_e = last_e - 1.5f;
+        }
+    }
+
+    last_e = current_e;
     return last_e;
 }
 
 /*
  * 功能：平衡车速度环(外环pid,速度环输出的目标角给直立环)*/
 float g_lap_dist = 0.0f; // 里程累加器（外部可见，供OLED读取）
+float g_stop_coast_dist = 27000.0f; // 开始减速滑行的里程
+float g_stop_target_dist = 30090.0f; // 彻底停车的目标里程
 
 void PID_Speed(void)
 {
@@ -276,8 +308,8 @@ void PID_Speed(void)
     if(!pid_speed_init)
     {
         // 完全恢复为你跑出“完美一圈”时的原本温和参数！！！
-        PID_speedstruct.kp=0.15f;
-        PID_speedstruct.ki=0.15f/200.0f;
+        PID_speedstruct.kp=0.25f;
+        PID_speedstruct.ki=0.25f/200.0f;
         PID_speedstruct.kd=0.0f;
         PID_speedstruct.target=0.0f;
         PID_speedstruct.actual=0.0f;
@@ -294,29 +326,48 @@ void PID_Speed(void)
 
     // ----- 定点停车状态机（纯里程判断） -----
     static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=减速滑行, 2=彻底刹停
-    #define STOP_COAST_DIST 28000.0f // 【需微调】开始减速滑行的里程
-    #define STOP_TARGET_DIST 30300.0f // 【需微调】彻底停车的目标里程
+    
+// 改为全局变量以支持按键修改
 
     g_lap_dist += AbsF(v);
 
     if (g_stop_state == 0) {
-        if (g_lap_dist > STOP_COAST_DIST) {
+        if (g_lap_dist > g_stop_coast_dist) {
             g_stop_state = 1; // 里程达到减速点，开始滑行缓冲
         }
     }
     if (g_stop_state == 1) {
-        if (g_lap_dist > STOP_TARGET_DIST) {
+        if (g_lap_dist > g_stop_target_dist) {
             g_stop_state = 2; // 达到最终里程，触发彻底停车
         }
     }
 
+    // ========== 新增底层保护：任何速度下禁止无故倒车！==========
+    // 若不处于最终强制停车状态，小车不应该允许拥有非常明显的负数速度（即使是减速时）
+    if(g_stop_state != 2) {
+        // 如果速度跌到了负数很大（比如<-2.0，说明它为了“压住”减速动作而过度后仰导致了倒车）
+        // 瞬间抛弃速度环积累的“减速积分”，防止其继续倒退
+        if(g_speed_filt < -1.5f) {
+            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, 0.0f, 15.0f); // 彻底剪掉负向积分，不许后仰
+        }
+    }
+    // ==============================================================
+
     if (g_stop_state == 2) {
         // 1. 停车状态：提供刹车参数，目标速度归零
         PID_speedstruct.kp = 0.4f; 
-        PID_speedstruct.ki = 0.01f;
+        PID_speedstruct.ki = 0.04f;
         PID_speedstruct.target = 0.0f; 
-        // 2. 解开负向死锁封印，允许积攒强大的后倾刹车力
-        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -90.0f, 15.0f);
+        
+        // 2. 解开负向死锁封印进行大力刹车；但若速度已经降到几乎为0，就必须立刻收紧所有积分，让它老实安静地保持站立
+        if (AbsF(g_speed_filt) < 2.0f) { // 速度接近停止
+            // 停车后“抽搐”是因为静止时哪怕只有极其微小的速度误差，也会随时间被积分器(I)疯狂累加
+            // 所以当车停稳后，我们要把它的正向和负向积分权限全部收缴，绝对不许它“偷偷攒劲往前窜”
+            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.5f, 0.5f);
+            PID_speedstruct.kp = 0.15f;  // 进一步软化比例项，避免车轮震动
+        } else {
+            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -90.0f, 15.0f);
+        }
     } else if (g_stop_state == 1) {
         // 【纯里程滑行】：在距离终点还有一段距离时，提前把目标速度降到龟速
         // 利用滑行减弱动能缓冲，到达目标里程瞬间就能稳稳停住，防止冲出去
@@ -326,9 +377,12 @@ void PID_Speed(void)
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     } else {
         // 1. 跑圈状态：维持微弱平顺参数，目标速度接回基础速度
-        PID_speedstruct.kp = 0.15f; 
-        PID_speedstruct.ki = 0.15f/200.0f;
-        PID_speedstruct.target = g_base_v_ref; 
+        turn_brake_filt = turn_brake_filt * 0.8f + Get_TurnPreviewLevel() * 0.2f; // 获取弯道前瞻
+        float speed_target_now = g_base_v_ref * (1.0f - 0.5f * turn_brake_filt); // 根据弯道情况减速（最多减速50%）
+
+        PID_speedstruct.kp = 0.25f; 
+        PID_speedstruct.ki = 0.25f/200.0f;
+        PID_speedstruct.target = speed_target_now; 
         // 2. 维持原来的防倒车死锁
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -10.0f, 15.0f);
     }
@@ -349,9 +403,9 @@ void PID_Turn(void)
     static float e_line = 0.0f; // 增加低通滤波防止抖动
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=3.0f;   // 因为设置了定速，1.5转不过来，增加到2.2增加转弯力度（且由于Kd降低了，在直线上也不会抽搐）
+        PID_turnstruct.kp=2.2f;   // 因为设置了定速，1.5转不过来，增加到2.2增加转弯力度（且由于Kd降低了，在直线上也不会抽搐）
         PID_turnstruct.ki=0.0f;
-        PID_turnstruct.kd=0.15f;  
+        PID_turnstruct.kd=0.25f;  
         PID_turnstruct.target=0.0f;
         PID_turnstruct.actual=0.0f;
         PID_turnstruct.error=0.0f;
@@ -362,14 +416,19 @@ void PID_Turn(void)
         pid_turn_init=1;
     }
     
-    // 对灰度原始误差做一次低通滤波，使这8个离散灯跳变时的曲线更平滑
-    e_line = e_line * 0.3f + Get_Grayerror() * 0.7f; 
+    // 加强低通滤波，极大降低灰度离散跳变造成的“直道左右抽搐”
+    e_line = e_line * 0.7f + Get_Grayerror() * 0.3f; 
+
+    // 使用非线性的动态参数：误差越大转弯越狠，在直线区间（误差约为0）保持极度温柔，彻底消除抖动！
+    float abs_e = AbsF(e_line);
+    PID_turnstruct.kp = 1.2f + 0.6f * abs_e;  // 在中间(e=0)时，Kp=1.2很温柔不起振；当它偏到边缘(e>3)时，Kp猛增到3.0+暴力拉回
+    PID_turnstruct.kd = 0.15f + 0.08f * abs_e; // 直线上Kd降到很低，不放大细微跳变
 
     PID_turnstruct.target=0.0f;
     PID_turnstruct.actual=e_line;
     out=PID_Cal(&PID_turnstruct,DT_TURN);
     PID_turnstruct.integral=PID_Limit(PID_turnstruct.integral,-100.0f,100.0f); // 积分限幅，防止积分饱和
-    g_turn_output=PID_Limit(out,-25.0f,25.0f);
+    g_turn_output=PID_Limit(out,-35.0f,35.0f); // 放大转向限幅，防止打死方向盘不够用
 }
 
 void TIM1_UP_IRQHandler(void)

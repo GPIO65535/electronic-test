@@ -4,11 +4,19 @@ volatile uint8_t g_flag_speed = 0;
 extern float g_lap_dist; 
 int main(void)
 {
-     ALL_Init();
-     Timer_Init();
+    ALL_Init();
+    Key_Init();
+    Timer_Init();
     OLED_Init();
-   
-
+    
+    // 上电后等待按键进行里程参数调整或直接开始
+    // 假设按下 KEY1 切换不同的目标里程
+    if(KEY_GET() == 1) {
+        g_stop_target_dist = 36000.0f; 
+        g_stop_coast_dist = g_stop_target_dist - 3090.0f;
+    }
+    
+    PID_SetBaseSpeedRef(8.0f);
     //OLED_ShowString(1, 1, "V:");
     //OLED_ShowString(1, 1, "E1:");
     //OLED_ShowString(2, 1, "E2:");
