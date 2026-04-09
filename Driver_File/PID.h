@@ -33,6 +33,7 @@ extern float g_speed_filt;
 extern float g_lap_dist;
 extern float g_stop_coast_dist;
 extern float g_stop_target_dist;
+extern uint8_t g_run_dir; // 0:逆时针(默认) 1:顺时针
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);

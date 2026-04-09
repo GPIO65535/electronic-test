@@ -228,6 +228,7 @@ static float Get_TurnPreviewLevel(void)
     preview=0.60f*e_norm+0.25f*edge_term+0.15f*width_term;
     return PID_Limit(preview,0.0f,1.0f);
 }
+uint8_t g_run_dir = 0; // 新增这一行：供外部(如 main.c) 引用的方向标志全局变量。 0:逆时针(默认) 1:顺时针
 static uint8_t g_gray_cnt = 0;
 
 /**
@@ -274,17 +275,39 @@ static float Get_Grayerror(void)
         if(gray[6]==1 || gray[7]==1) right_on = 1;
     #endif
 
+    // ===== 赛道进度计数器（精确识别过了几条黑线） =====
+    static uint8_t cross_cnt = 0;              // 过了几根全黑线的次数
+    static uint8_t last_full_line_state = 0;   // 状态记录，防止在一个路口疯狂累加加
+    
+    // 如果当前读到 >=6 盏灯（全亮带一点偏差也算），且上一次还没踩中，那就是新碰到了横线
+    uint8_t current_full_line = (g_gray_cnt >= 6 || (left_on && right_on)) ? 1 : 0;
+    
+    if (current_full_line == 1 && last_full_line_state == 0) {
+        cross_cnt++;  // 真真切切踩到了一根新横线！次数+1
+    }
+    last_full_line_state = current_full_line; // 更新状态
+
+    // ===== 自动学习车辆直线物理偏置中心 =====
+    static float avg_straight_e = 0.0f;
+    // 只有当小车正常走直线（单边没碰到横线，且探头只有1~3个亮点）时，才缓慢学习它的物理中心
+    if (g_gray_cnt > 0 && g_gray_cnt <= 3 && !left_on && !right_on) {
+        avg_straight_e = avg_straight_e * 0.95f + current_e * 0.05f; 
+    }
+
+    // ===== E点精准屏蔽与十字路口处理 =====
+    // E点状态机：0=还没遇到E点, 1=车头正在压E点, 2=车头已经驶出E点
+    static uint8_t e_state = 0;
+    if (current_full_line == 1) {
+        e_state = 0; // 每遇到完整的路口/横线，重置 E 点状态，准备迎接下一个E点
+    }
+
     if (left_on && right_on) {
-        // 1. 完全压入十字路口：直接认定为0偏差（强制直走）
         current_e = 0.0f; 
-    } 
-    else {
-        // 2. 正常巡线或者即将进入/离开十字路口的情况
-        // 限制跳变幅度防抖，避免斜切入十字时某一侧探头先摸到横线导致单边剧烈拉飘
-        if (current_e - last_e > 1.5f) {
-            current_e = last_e + 1.5f; 
-        } else if (current_e - last_e < -1.5f) {
-            current_e = last_e - 1.5f;
+        
+        if (current_e - last_e > 4.5f) {
+            current_e = last_e + 4.5f; 
+        } else if (current_e - last_e < -4.5f) {
+            current_e = last_e - 4.5f;
         }
     }
 
