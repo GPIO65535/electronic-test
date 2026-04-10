@@ -1,7 +1,7 @@
 #include"PID.h"
-static float g_target_pitch_from_speed=0.0f; // 速度环输出的目标角度，供直立环使用
+static float g_target_pitch_from_speed=0.0f; // 速度环输出的目标角度，供直立环使�?
 static float g_speed_filt=0.0f;//速度测量滤波
-static float g_turn_output=0.0f;//转速偏差
+static float g_turn_output=0.0f;//转速偏�?
 static float g_up_dt=DT_UP;//直立环动态dt
 static volatile uint32_t g_pid_ms_tick=0;//1ms系统节拍
 
@@ -23,7 +23,7 @@ void PID_SetBaseSpeedRef(float v_ref)
 
 
 /**
- * 功能：全局初始化
+ * 功能：全局初始�?
  * 参数：无
  */
 void ALL_Init(void)
@@ -53,8 +53,8 @@ float PID_Cal(PID_t *pid,float dt)
 }
 /**
  * 功能：PID限幅
- * 参数：value - 待限幅的值，min - 最小值，max - 最大值
- * 返回值：限幅后的值
+ * 参数：value - 待限幅的值，min - 最小值，max - 最大�?
+ * 返回值：限幅后的�?
  */
 float PID_Limit(float value,float min,float max)
 {
@@ -70,7 +70,7 @@ float PID_Limit(float value,float min,float max)
 }
 
 /**
- * 功能：1ms计数的计数
+ * 功能�?ms计数的计�?
  */
 void PID_Timebase1ms_Tick(void)
 {
@@ -78,7 +78,7 @@ void PID_Timebase1ms_Tick(void)
 }
 
 /**
- * 功能：获取当前1ms计数的计数
+ * 功能：获取当�?ms计数的计�?
  */
 uint32_t PID_Timebase1ms_Get(void)
 {
@@ -104,7 +104,7 @@ void PID_Up_UpdateDt(float dt)
     g_up_dt = PID_Limit(dt, DT_UP_MIN, DT_UP_MAX);
 }
 /**
- * 功能：平衡车直立环
+ * 功能：平衡车直立�?
  * 参数：无
  */
 void PID_Up(void)
@@ -143,7 +143,7 @@ void PID_Up(void)
         PID_upstruct.actual=0.0f;
         PID_upstruct.error=0.0f;
         
-        // 【关键】：开机第一帧时，防止因为初始last_error=0导致的微分爆发
+        // 【关键】：开机第一帧时，防止因为初始last_error=0导致的微分爆�?
         PID_upstruct.last_error=g_target_pitch_from_speed - Pitch; 
         
         PID_upstruct.integral=0.0f;
@@ -152,11 +152,11 @@ void PID_Up(void)
         pid_up_init = 1;
     }
 
-    PID_upstruct.target = g_target_pitch_from_speed;      // 目标直立角，由速度环实时偏置给出
-    PID_upstruct.actual = Pitch;
+    PID_upstruct.target = g_target_pitch_from_speed;      // 目标直立角，由速度环实时偏置给�?
+    PID_upstruct.actual = Pitch-0.3;
 
     dt_used = PID_Limit(g_up_dt, DT_UP_MIN, DT_UP_MAX);
-    pidup_output=PID_Cal(&PID_upstruct,dt_used); // 使用动态dt，减少单帧延迟影响
+    pidup_output=PID_Cal(&PID_upstruct,dt_used); // 使用动态dt，减少单帧延迟影�?
     pidup_output=PID_Limit(pidup_output,-99.0f,99.0f);
     left_pwm=PID_Limit(pidup_output-g_turn_output,-99.0f,99.0f);
     right_pwm=PID_Limit(pidup_output+g_turn_output,-99.0f,99.0f);
@@ -165,7 +165,7 @@ void PID_Up(void)
     Motor_SetPWM(2,(int8_t)right_pwm);
 }
 /**
- * 获取平衡车当前速度，供速度环使用
+ * 获取平衡车当前速度，供速度环使�?
  */
 static float Get_CarSpeed(void)
 {
@@ -180,6 +180,7 @@ static float Get_CarSpeed(void)
 static float Get_TurnPreviewLevel(void)
 {
     static const float weight[8]={-3.5f,-2.5f,-1.5f,-0.5f,0.5f,1.5f,2.5f,3.5f};
+    static float last_preview=0.0f;
     uint8_t gray[8];
     uint8_t i,cnt=0;
     float sum=0.0f;
@@ -204,7 +205,7 @@ static float Get_TurnPreviewLevel(void)
 
     if(cnt==0)
     {
-        return 1.0f; 
+        return 0.0f; 
     }
 
     e_norm=AbsF(sum/(float)cnt)/3.5f;
@@ -228,7 +229,7 @@ static float Get_TurnPreviewLevel(void)
     preview=0.60f*e_norm+0.25f*edge_term+0.15f*width_term;
     return PID_Limit(preview,0.0f,1.0f);
 }
-uint8_t g_run_dir = 0; // 0:逆时针(默认) 1:顺时针
+uint8_t g_run_dir = 0; // 0:逆时�?默认) 1:顺时�?
 static uint8_t g_gray_cnt = 0;
 
 /**
@@ -237,8 +238,8 @@ static uint8_t g_gray_cnt = 0;
 static float Get_Grayerror(void)
 {
     static const float weight[8]={-3.5f,-2.5f,-1.5f,-0.5f,0.5f,1.5f,2.5f,3.5f}; // 灰度传感器权重，根据实际情况调整
-    static float last_e=0.0f;//上次误差值
-    uint8_t gray[8];//灰度传感器原始值
+    static float last_e=0.0f;//上次误差�?
+    uint8_t gray[8];//灰度传感器原始�?
     uint8_t i,cnt=0;
     float sum=0;
     GraySensor_ReadAll(gray);
@@ -275,12 +276,12 @@ static float Get_Grayerror(void)
         if(gray[6]==1 || gray[7]==1) right_on = 1;
     #endif
     if (left_on && right_on) {
-        current_e = 2.5f; 
+        current_e = 0.1f; 
         
-        if (current_e - last_e > 2.0f) {
-            current_e = last_e + 2.0f; 
-        } else if (current_e - last_e < -2.0f) {
-            current_e = last_e - 2.0f;
+        if (current_e - last_e > 2.5f) {
+            current_e = last_e + 2.5f; 
+        } else if (current_e - last_e < -2.5f) {
+            current_e = last_e - 2.5f;
         }
     }
 
@@ -289,10 +290,10 @@ static float Get_Grayerror(void)
 }
 
 /*
- * 功能：平衡车速度环(外环pid,速度环输出的目标角给直立环)*/
-float g_lap_dist = 0.0f; // 里程累加器（外部可见，供OLED读取）
+ * 功能：平衡车速度�?外环pid,速度环输出的目标角给直立�?*/
+float g_lap_dist = 0.0f; // 里程累加器（外部可见，供OLED读取�?
 float g_stop_coast_dist = 24000.0f; // 开始减速滑行的里程
-float g_stop_target_dist = 28000.0f; // 彻底停车的目标里程
+float g_stop_target_dist = 28000.0f; // 彻底停车的目标里�?
 
 void PID_Speed(void)
 {
@@ -304,7 +305,7 @@ void PID_Speed(void)
     if(!pid_speed_init)
     {
         PID_speedstruct.kp=0.25f;
-        PID_speedstruct.ki=0.25f/200.0f;
+        PID_speedstruct.ki=0.25f/200.0f; // 补偿dt的影响
         PID_speedstruct.kd=0.0f;
         PID_speedstruct.target=0.0f;
         PID_speedstruct.actual=0.0f;
@@ -316,19 +317,19 @@ void PID_Speed(void)
         pid_speed_init = 1;
     }
     v=Get_CarSpeed();
-    //速度低通滤波
+    //速度低通滤�?
     g_speed_filt=alpha*v+(1-alpha)*g_speed_filt;
 
-    // ----- 定点停车状态机（纯里程判断） -----
-    static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=减速滑行, 2=彻底刹停
+    // ----- 定点停车状态机（纯里程判断�?-----
+    static uint8_t g_stop_state = 0; // 0=盲跑阶段, 1=减速滑�? 2=彻底刹停
     
-// 改为全局变量以支持按键修改
+// 改为全局变量以支持按键修�?
 
     g_lap_dist += AbsF(v);
 
     if (g_stop_state == 0) {
         if (g_lap_dist > g_stop_coast_dist) {
-            g_stop_state = 1; // 里程达到减速点，开始滑行缓冲
+            g_stop_state = 1; // 里程达到减速点，开始滑行缓�?
         }
     }
     if (g_stop_state == 1) {
@@ -338,44 +339,42 @@ void PID_Speed(void)
     }
 
     if(g_stop_state != 2) {
-        // 如果速度跌到了负数很大（比如<-2.0，说明它为了“压住”减速动作而过度后仰导致了倒车）
+        // 如果速度跌到了负数很大（比如<-2.0，说明它为了“压住”减速动作而过度后仰导致了倒车�?
         // 瞬间抛弃速度环积累的“减速积分”，防止其继续倒退
-        if(g_speed_filt < -1.5f) {
-            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, 0.0f, 15.0f); // 彻底剪掉负向积分，不许后仰
-        }
+        // if(g_speed_filt < -1.5f) {
+        //     PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, 0.0f, 15.0f); // 彻底剪掉负向积分，不许后�?
+        // }
     }
     // ==============================================================
 
+        float preview_now = Get_TurnPreviewLevel();
+    if(preview_now > turn_brake_filt) {
+        turn_brake_filt = turn_brake_filt * 0.6f + preview_now * 0.4f;
+    } else {
+        turn_brake_filt = turn_brake_filt * 0.96f + preview_now * 0.04f;
+    }
+    float speed_target_now = g_base_v_ref * (1.0f - 0.5f * turn_brake_filt);
+
     if (g_stop_state == 2) {
-        // 1. 停车状态：提供刹车参数，目标速度归零
-        PID_speedstruct.kp = 0.4f; 
+        PID_speedstruct.kp = 0.6f;
         PID_speedstruct.ki = 0.04f;
-        PID_speedstruct.target = 0.0f; 
-        
-        // 2. 解开负向死锁封印进行大力刹车；但若速度已经降到几乎为0，就必须立刻收紧所有积分，让它老实安静地保持站立
-        if (AbsF(g_speed_filt) < 2.0f) { // 速度接近停止
-            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.5f, 0.5f);
-            PID_speedstruct.kp = 0.15f;  // 进一步软化比例项，避免车轮震动
+        PID_speedstruct.target = 0.0f;
+        if (AbsF(g_speed_filt) < 2.0f) {
+            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.5f/PID_speedstruct.ki, 0.5f/PID_speedstruct.ki);
+            PID_speedstruct.kp = 0.15f;
         } else {
             PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -90.0f, 15.0f);
         }
     } else if (g_stop_state == 1) {
-        // 【纯里程滑行】：在距离终点还有一段距离时，提前把目标速度降到龟速
-        // 利用滑行减弱动能缓冲，到达目标里程瞬间就能稳稳停住，防止冲出去
-        PID_speedstruct.kp = 0.15f; 
-        PID_speedstruct.ki = 0.15f/200.0f;
-        PID_speedstruct.target = 0.5f; // 龟速滑行 
+        PID_speedstruct.kp = 0.25f;
+        PID_speedstruct.ki = (0.25f/200.0f);
+        PID_speedstruct.target = speed_target_now * 0.5f; 
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     } else {
-        // 1. 跑圈状态：维持微弱平顺参数，目标速度接回基础速度
-        turn_brake_filt = turn_brake_filt * 0.8f + Get_TurnPreviewLevel() * 0.2f; // 获取弯道前瞻
-        float speed_target_now = g_base_v_ref * (1.0f - 0.5f * turn_brake_filt); // 根据弯道情况减速（最多减速50%）
-
-        PID_speedstruct.kp = 0.25f; 
-        PID_speedstruct.ki = 0.25f/200.0f;
-        PID_speedstruct.target = speed_target_now; 
-        // 2. 维持原来的防倒车死锁
-        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -10.0f, 15.0f);
+        PID_speedstruct.kp = 0.25f;
+        PID_speedstruct.ki = (0.25f/200.0f);
+        PID_speedstruct.target = speed_target_now;
+        PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
     // ---------------------------------------------
 
@@ -391,10 +390,9 @@ void PID_Turn(void)
     static PID_t PID_turnstruct;
     static uint8_t pid_turn_init=0;
     float out;
-    static float e_line = 0.0f; // 增加低通滤波防止抖动
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=2.4f;   
+        PID_turnstruct.kp=4.2f;   
         PID_turnstruct.ki=0.0f;
         PID_turnstruct.kd=0.1f;  
         PID_turnstruct.target=0.0f;
@@ -406,17 +404,10 @@ void PID_Turn(void)
         PID_turnstruct.output=0.0f;
         pid_turn_init=1;
     }
-    
-    // 加强低通滤波，极大降低灰度离散跳变造成的“直道左右抽搐”
-    e_line = e_line * 0.7f + Get_Grayerror() * 0.3f; 
-    float abs_e = AbsF(e_line);
-    PID_turnstruct.kp = 1.2f + 0.6f * abs_e; 
-    PID_turnstruct.kd = 0.15f + 0.08f * abs_e;
-
     PID_turnstruct.target=0.0f;
-    PID_turnstruct.actual=e_line;
+    PID_turnstruct.actual=Get_Grayerror();
     out=PID_Cal(&PID_turnstruct,DT_TURN);
-    PID_turnstruct.integral=PID_Limit(PID_turnstruct.integral,-100.0f,100.0f); // 积分限幅，防止积分饱和
+    PID_turnstruct.integral=PID_Limit(PID_turnstruct.integral,-100.0f,100.0f); // 积分限幅，防止积分饱�?
     g_turn_output=PID_Limit(out,-35.0f,35.0f);
 }
 
@@ -427,10 +418,10 @@ void TIM1_UP_IRQHandler(void)
 
     if (TIM_GetITStatus(TIM1, TIM_IT_Update) == SET)
     {
-        // 1ms 时基，供直立环动态 dt 使用
+        // 1ms 时基，供直立环动�?dt 使用
         PID_Timebase1ms_Tick();
 
-        // 10ms 转向环节拍
+        // 10ms 转向环节�?
         cnt_turn++;
         if (cnt_turn >= 10)
         {
@@ -438,7 +429,7 @@ void TIM1_UP_IRQHandler(void)
             g_flag_turn = 1;
         }
 
-        // 20ms 速度环节拍
+        // 20ms 速度环节�?
         cnt_speed++;
         if (cnt_speed >= 20)
         {

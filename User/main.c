@@ -8,12 +8,11 @@ int main(void)
     Key_Init();
     Timer_Init();
     OLED_Init();
-    PID_SetBaseSpeedRef(2.0f);
     // 上电后等待按键进行里程参数调整或直接开始
     // 按下 KEY1 启动顺时针模式：改变里程，并进入方向标志位1
     if(KEY_GET() == 1) {
-        g_stop_target_dist = 60000.0f;
-        g_stop_coast_dist = 50000.0f;
+        g_stop_target_dist = 75000.0f;
+        g_stop_coast_dist = 70000.0f;
         g_run_dir = 1; // 1:顺时针
     }
     //PID_SetBaseSpeedRef(1.0f);
