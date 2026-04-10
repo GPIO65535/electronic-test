@@ -45,5 +45,6 @@ void PID_Up(void);
 void PID_Speed(void);
 void PID_Turn(void);
 void PID_SetBaseSpeedRef(float v_ref);
+void PID_ClearSpeedState(void);
 #endif
 
