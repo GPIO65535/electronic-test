@@ -138,7 +138,7 @@ void PID_Up(void)
     {
         PID_upstruct.kp=10.5f*0.6f;
         PID_upstruct.ki=0.0f;
-        PID_upstruct.kd=0.09f*0.6f;
+        PID_upstruct.kd=0.11f*0.6f;
         PID_upstruct.target=0.0f;
         PID_upstruct.actual=0.0f;
         PID_upstruct.error=0.0f;
@@ -183,6 +183,7 @@ static float Get_TurnPreviewLevel(void)
     static float last_preview=0.0f;
     uint8_t gray[8];
     uint8_t i,cnt=0;
+    uint8_t use_cross_bias = 0;
     float sum=0.0f;
     float e_norm;
     float edge_term;
@@ -234,6 +235,7 @@ volatile uint8_t g_task_mode = 0;
 volatile uint8_t g_cross_line_cnt = 0;
 volatile uint8_t g_is_turning_180 = 0;
 static float g_target_yaw = 0.0f; // 目标掉头偏航角
+static uint8_t g_task3_cross_armed = 0;
 
 static uint8_t g_gray_cnt = 0;
 /**
@@ -245,6 +247,7 @@ static float Get_Grayerror(void)
     static float last_e=0.0f;//上次误差�?
     uint8_t gray[8];//灰度传感器原始�?
     uint8_t i,cnt=0;
+    uint8_t use_cross_bias = 0;
     float sum=0;
     GraySensor_ReadAll(gray);
     for(i=0;i<8;i++)
@@ -273,20 +276,35 @@ static float Get_Grayerror(void)
     // 检测极左和极右是否同时压线
     uint8_t left_on = 0, right_on = 0;
     #if LINE_IS_LOW  
-        if(gray[0]==0 || gray[1]==0) left_on = 1;
-        if(gray[6]==0 || gray[7]==0) right_on = 1;
+        if(gray[0]==0 && gray[1]==0) left_on = 1;
+        if(gray[6]==0 && gray[7]==0) right_on = 1;
     #else        
-        if(gray[0]==1 || gray[1]==1) left_on = 1;
-        if(gray[6]==1 || gray[7]==1) right_on = 1;
+        if(gray[0]==1 && gray[1]==1) left_on = 1;
+        if(gray[6]==1 && gray[7]==1) right_on = 1;
     #endif    
     // ----- 新增考题模式计线与触发逻辑 -----
     static uint8_t last_cross_state = 0;
-    uint8_t current_cross_state = (left_on && right_on) ? 1 : 0;
+    uint8_t raw_cross_state;
+    uint8_t current_cross_state;
+    if (g_task_mode == 3)
+    {
+        raw_cross_state = (cnt >= 7 &&left_on && right_on) ? 1 : 0;
+        current_cross_state = raw_cross_state;
+    }
+    else
+    {
+        raw_cross_state = (left_on && right_on) ? 1 : 0;
+        current_cross_state = (left_on && right_on) ? 1 : 0;
+    }
     
     if (g_task_mode == 3 && !g_is_turning_180) { // 如果不处于掉头过程中
         static uint32_t last_cross_ms = 0;
-        // 捕捉上升沿，并加上1000ms软件防抖，防止路口宽度导致的多次触发
-        if (current_cross_state && !last_cross_state) {
+        if (!g_task3_cross_armed) {
+            if (!current_cross_state) {
+                g_task3_cross_armed = 1;
+            }
+        }
+        else if (current_cross_state && !last_cross_state) {
             if (PID_Timebase1ms_Get() - last_cross_ms > 1000) { 
                 g_cross_line_cnt++;
                 last_cross_ms = PID_Timebase1ms_Get();
@@ -311,7 +329,7 @@ static float Get_Grayerror(void)
     }
     last_cross_state = current_cross_state;
     // ------------------------------------
-    if (left_on && right_on) {
+    if ( left_on && right_on) {
         // 根据方向标志位决定路口是左拐(-1.3)还是右拐(1.3)
         // 假设原先硬编码的 1.3f 是右�?顺时�?
         if(g_run_dir==0)
@@ -328,8 +346,7 @@ static float Get_Grayerror(void)
             current_e = last_e - 2.5f;
         }
     }
-
-    last_e = current_e;
+        last_e = current_e;
     return last_e;
 }
 
@@ -347,6 +364,7 @@ void PID_ClearSpeedState(void)
     Encoder_Get(2);
     g_speed_filt = 0.0f;
     g_lap_dist = 0.0f;
+    g_task3_cross_armed = 0;
     PID_speedstruct.integral = 0.0f;
     PID_speedstruct.error = 0.0f;
     PID_speedstruct.target = 0.0f;
@@ -373,7 +391,7 @@ void PID_Speed(void)
     if(!pid_speed_init)
     {
         PID_speedstruct.kp=0.3f;
-        PID_speedstruct.ki=0.3/200.0f;
+        PID_speedstruct.ki=0.2/200.0f;
         PID_speedstruct.kd=0.0f;
         PID_speedstruct.target=0.0f;
         PID_speedstruct.actual=0.0f;
@@ -425,12 +443,12 @@ void PID_Speed(void)
         }
     } else if (g_stop_state == 1) {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.3f/200.0f;
+        PID_speedstruct.ki = 0.2f/200.0f;
         PID_speedstruct.target = speed_target_now * 0.5f;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     } else {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.3f/200.0f;
+        PID_speedstruct.ki = 0.2f/200.0f;
         PID_speedstruct.target = speed_target_now;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
@@ -447,7 +465,7 @@ void PID_Speed(void)
     float pid_output=PID_Cal(&PID_speedstruct,DT_SPEED);// dt使用实际控制周期
     
     // 将速度环输出限幅后给直立环作为目标倾角
-    g_target_pitch_from_speed=PID_Limit(pid_output,-5.0f,5.0f);
+    g_target_pitch_from_speed=PID_Limit(pid_output,-4.0f,4.0f);
 }
 void PID_Turn(void)
 {
@@ -456,7 +474,7 @@ void PID_Turn(void)
     float out;
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=3.0f;   
+        PID_turnstruct.kp=3.1f;   
         PID_turnstruct.ki=0.0f;
         PID_turnstruct.kd=0.3f;  
         PID_turnstruct.target=0.0f;
@@ -467,9 +485,9 @@ void PID_Turn(void)
         PID_turnstruct.output=0.0f;
         
         // --- 陀螺仪掉头专用的PID参数配置 ---
-        PID_yawturnstruct.kp=1.5f;   
+        PID_yawturnstruct.kp=2.0f;   
         PID_yawturnstruct.ki=0.0f;
-        PID_yawturnstruct.kd=0.2f;  
+        PID_yawturnstruct.kd=0.25f;  
         PID_yawturnstruct.target=0.0f;
         PID_yawturnstruct.integral=0.0f;
         PID_yawturnstruct.last_error=0.0f;
@@ -488,7 +506,7 @@ void PID_Turn(void)
         PID_yawturnstruct.target = 0.0f; 
         PID_yawturnstruct.actual = -error;  // 用负误差代替实际值
         out = PID_Cal(&PID_yawturnstruct, DT_TURN);
-        g_turn_output = PID_Limit(out, -40.0f, 40.0f); // 适当限制掉头大速度
+        g_turn_output = PID_Limit(out, -50.0f, 50.0f); // 适当限制掉头大速度
         
         // 3. 判断是否掉头完成 (稳在目标正负5度以内)
         static uint16_t ok_cnt = 0;
