@@ -1,15 +1,17 @@
 #ifndef __PID_H__
-#define __PID_H__ 
-#include"stm32f10x.h"
-#include"Encoder.h"
-#include"Motor.h"
-#include"Wit.h"
-#include"GraySensor.h"
-#include"Timer.h"
+#define __PID_H__
+
+#include "stm32f10x.h"
+#include "Encoder.h"
+#include "Motor.h"
+#include "Wit.h"
+#include "GraySensor.h"
+#include "Timer.h"
+
 typedef struct
 {
     float kp;
-    float ki; 
+    float ki;
     float kd;
     float target;
     float actual;
@@ -18,14 +20,12 @@ typedef struct
     float integral;
     float derivative;
     float output;
-}PID_t;
+} PID_t;
 
-
-
-#define LINE_IS_LOW 1 //1:巡线低电平有效 
-#define DT_UP      0.005f   // 直立环周期 5ms
-#define DT_SPEED   0.020f   // 速度环周期 20ms
-#define DT_TURN    0.010f   // 转向环周期 10ms
+#define LINE_IS_LOW 1   // 1: 巡线为低电平有效
+#define DT_UP      0.005f
+#define DT_SPEED   0.020f
+#define DT_TURN    0.010f
 
 extern volatile uint8_t g_flag_turn;
 extern volatile uint8_t g_flag_speed;
@@ -33,10 +33,11 @@ extern float g_speed_filt;
 extern float g_lap_dist;
 extern float g_stop_coast_dist;
 extern float g_stop_target_dist;
-extern uint8_t g_run_dir; // 0:逆时针(默认) 1:顺时针
-extern volatile uint8_t g_task_mode;      // 任务模式（0正常, 3专属解题模式）
-extern volatile uint8_t g_cross_line_cnt; // 经过全黑标志线的次数
-extern volatile uint8_t g_is_turning_180; // 是否正在进行陀螺仪掉头标志
+extern uint8_t g_run_dir;
+extern volatile uint8_t g_task_mode;
+extern volatile uint8_t g_cross_line_cnt;
+extern volatile uint8_t g_is_turning_180;
+extern volatile uint8_t g_task3_state_dbg;
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);
@@ -49,5 +50,5 @@ void PID_Speed(void);
 void PID_Turn(void);
 void PID_SetBaseSpeedRef(float v_ref);
 void PID_ClearSpeedState(void);
-#endif
 
+#endif
