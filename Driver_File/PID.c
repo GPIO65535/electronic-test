@@ -136,15 +136,15 @@ void PID_Up(void)
 
     if(!pid_up_init)
     {
-        PID_upstruct.kp=6.5f*0.6f;
+        PID_upstruct.kp=10.5f*0.6f;
         PID_upstruct.ki=0.0f;
-        PID_upstruct.kd=0.3f*0.6f;
+        PID_upstruct.kd=0.09f*0.6f;
         PID_upstruct.target=0.0f;
         PID_upstruct.actual=0.0f;
         PID_upstruct.error=0.0f;
         
         // 【关键】：开机第一帧时，防止因为初始last_error=0导致的微分爆�?
-        PID_upstruct.last_error=g_target_pitch_from_speed - (Pitch-0.006f);
+        PID_upstruct.last_error=g_target_pitch_from_speed - (Pitch);
         
         PID_upstruct.integral=0.0f;
         PID_upstruct.derivative=0.0f;
@@ -153,7 +153,7 @@ void PID_Up(void)
     }
 
     PID_upstruct.target = g_target_pitch_from_speed;      // 目标直立角，由速度环实时偏置给�?
-    PID_upstruct.actual = Pitch-0.006f;
+    PID_upstruct.actual = Pitch;
 
     dt_used = PID_Limit(g_up_dt, DT_UP_MIN, DT_UP_MAX);
     pidup_output=PID_Cal(&PID_upstruct,dt_used); // 使用动态dt，减少单帧延迟影�?
@@ -229,7 +229,12 @@ static float Get_TurnPreviewLevel(void)
     preview=0.60f*e_norm+0.25f*edge_term+0.15f*width_term;
     return PID_Limit(preview,0.0f,1.0f);
 }
-uint8_t g_run_dir = 0; // 0:逆时�?默认) 1:顺时�?
+uint8_t g_run_dir = 0; // 0:逆时针(默认) 1:顺时针
+volatile uint8_t g_task_mode = 0;
+volatile uint8_t g_cross_line_cnt = 0;
+volatile uint8_t g_is_turning_180 = 0;
+static float g_target_yaw = 0.0f; // 目标掉头偏航角
+
 static uint8_t g_gray_cnt = 0;
 /**
  * 获取灰度传感器误差，供转向环使用
@@ -273,7 +278,39 @@ static float Get_Grayerror(void)
     #else        
         if(gray[0]==1 || gray[1]==1) left_on = 1;
         if(gray[6]==1 || gray[7]==1) right_on = 1;
-    #endif
+    #endif    
+    // ----- 新增考题模式计线与触发逻辑 -----
+    static uint8_t last_cross_state = 0;
+    uint8_t current_cross_state = (left_on && right_on) ? 1 : 0;
+    
+    if (g_task_mode == 3 && !g_is_turning_180) { // 如果不处于掉头过程中
+        static uint32_t last_cross_ms = 0;
+        // 捕捉上升沿，并加上1000ms软件防抖，防止路口宽度导致的多次触发
+        if (current_cross_state && !last_cross_state) {
+            if (PID_Timebase1ms_Get() - last_cross_ms > 1000) { 
+                g_cross_line_cnt++;
+                last_cross_ms = PID_Timebase1ms_Get();
+                
+                // 第3次(C线) 和 第4次(D线) 触发180度折返
+                if (g_cross_line_cnt == 3 || g_cross_line_cnt == 4) {
+                    g_is_turning_180 = 1;
+                    g_target_yaw = Yaw - 180.0f; 
+                    // 处理偏航角越界 (-180 到 180 体系)
+                    if (g_target_yaw <= -180.0f) g_target_yaw += 360.0f;
+                }
+                
+                // --- 完美停车逻辑 ---
+                // 第7次(B线)到达，重新开始里程计，准备在A线前精准停车
+                if (g_cross_line_cnt == 7) {
+                    g_lap_dist = 0.0f;           // 当前在B，里程清0
+                    g_stop_coast_dist = 190.0f;  // 跑190mm开始减速滑行
+                    g_stop_target_dist = 230.0f; // 跑到230mm彻底刹停 (AB为250mm距离)
+                }
+            }
+        }
+    }
+    last_cross_state = current_cross_state;
+    // ------------------------------------
     if (left_on && right_on) {
         // 根据方向标志位决定路口是左拐(-1.3)还是右拐(1.3)
         // 假设原先硬编码的 1.3f 是右�?顺时�?
@@ -335,8 +372,8 @@ void PID_Speed(void)
     float v;
     if(!pid_speed_init)
     {
-        PID_speedstruct.kp=0.25f;
-        PID_speedstruct.ki=0.25/200.0f;
+        PID_speedstruct.kp=0.3f;
+        PID_speedstruct.ki=0.3/200.0f;
         PID_speedstruct.kd=0.0f;
         PID_speedstruct.target=0.0f;
         PID_speedstruct.actual=0.0f;
@@ -387,13 +424,13 @@ void PID_Speed(void)
             PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
         }
     } else if (g_stop_state == 1) {
-        PID_speedstruct.kp = 0.25f;
-        PID_speedstruct.ki = 0.25f/200.0f;
+        PID_speedstruct.kp = 0.3f;
+        PID_speedstruct.ki = 0.3f/200.0f;
         PID_speedstruct.target = speed_target_now * 0.5f;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     } else {
-        PID_speedstruct.kp = 0.25f;
-        PID_speedstruct.ki = 0.25f/200.0f;
+        PID_speedstruct.kp = 0.3f;
+        PID_speedstruct.ki = 0.3f/200.0f;
         PID_speedstruct.target = speed_target_now;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
@@ -415,25 +452,67 @@ void PID_Speed(void)
 void PID_Turn(void)
 {
     static uint8_t pid_turn_init=0;
+    static PID_t PID_yawturnstruct; // 新增一个给偏航角掉头用的独立PID结构体
     float out;
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=2.6f;   
+        PID_turnstruct.kp=3.7f;   
         PID_turnstruct.ki=0.0f;
-        PID_turnstruct.kd=0.1f;  
+        PID_turnstruct.kd=0.22f;  
         PID_turnstruct.target=0.0f;
         PID_turnstruct.actual=0.0f;
         PID_turnstruct.error=0.0f;
         PID_turnstruct.integral=0.0f;
         PID_turnstruct.derivative=0.0f;
         PID_turnstruct.output=0.0f;
+        
+        // --- 陀螺仪掉头专用的PID参数配置 ---
+        PID_yawturnstruct.kp=1.5f;   
+        PID_yawturnstruct.ki=0.0f;
+        PID_yawturnstruct.kd=0.2f;  
+        PID_yawturnstruct.target=0.0f;
+        PID_yawturnstruct.integral=0.0f;
+        PID_yawturnstruct.last_error=0.0f;
+
         pid_turn_init=1;
     }
-    PID_turnstruct.target=0.0f;
-    PID_turnstruct.actual=Get_Grayerror();
-    out=PID_Cal(&PID_turnstruct,DT_TURN);
-    PID_turnstruct.integral=PID_Limit(PID_turnstruct.integral,-100.0f,100.0f); // 积分限幅，防止积分饱�?
-    g_turn_output=PID_Limit(out,-35.0f,35.0f);
+    
+    // 如果系统标记掉头中，则接管转速输出控制权
+    if (g_task_mode == 3 && g_is_turning_180) {
+        // 1. 计算偏航角误差（取最短旋转路径）
+        float error = g_target_yaw - Yaw;
+        while (error > 180.0f) error -= 360.0f;
+        while (error < -180.0f) error += 360.0f;
+        
+        // 2. 利用专门的PID掉头闭环化零
+        PID_yawturnstruct.target = 0.0f; 
+        PID_yawturnstruct.actual = -error;  // 用负误差代替实际值
+        out = PID_Cal(&PID_yawturnstruct, DT_TURN);
+        g_turn_output = PID_Limit(out, -40.0f, 40.0f); // 适当限制掉头大速度
+        
+        // 3. 判断是否掉头完成 (稳在目标正负5度以内)
+        static uint16_t ok_cnt = 0;
+        if (AbsF(error) < 5.0f) {
+            ok_cnt++;
+            if (ok_cnt > 20) { // 连续稳定满 200ms (20*10ms)
+                g_is_turning_180 = 0;
+                ok_cnt = 0;
+                // --- 物理转向完成后，反转循迹标志！---
+                if (g_cross_line_cnt == 3) g_run_dir = 1; // 第一次掉头完(C向D)，改为顺时针
+                if (g_cross_line_cnt == 4) g_run_dir = 0; // 第二次掉头完(D向C)，改回逆时针
+            }
+        } else {
+            ok_cnt = 0; // 若有抖动重新稳定计数
+        }
+        
+    } else {
+        // ------ 原有正常循迹逻辑 ------
+        PID_turnstruct.target=0.0f;
+        PID_turnstruct.actual=Get_Grayerror();
+        out=PID_Cal(&PID_turnstruct,DT_TURN);
+        PID_turnstruct.integral=PID_Limit(PID_turnstruct.integral,-100.0f,100.0f); // 积分限幅
+        g_turn_output=PID_Limit(out,-35.0f,35.0f);
+    }
 }
 
 void TIM1_UP_IRQHandler(void)

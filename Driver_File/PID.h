@@ -34,6 +34,9 @@ extern float g_lap_dist;
 extern float g_stop_coast_dist;
 extern float g_stop_target_dist;
 extern uint8_t g_run_dir; // 0:逆时针(默认) 1:顺时针
+extern volatile uint8_t g_task_mode;      // 任务模式（0正常, 3专属解题模式）
+extern volatile uint8_t g_cross_line_cnt; // 经过全黑标志线的次数
+extern volatile uint8_t g_is_turning_180; // 是否正在进行陀螺仪掉头标志
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);
