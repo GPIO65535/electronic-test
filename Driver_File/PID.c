@@ -414,11 +414,11 @@ void PID_Speed(void)
     float speed_target_now = g_base_v_ref * (1.0f - 0.5f * turn_brake_filt);
 
     if (g_stop_state == 2) {
-        PID_speedstruct.kp = 0.6f;
+        PID_speedstruct.kp = 0.3f;
         PID_speedstruct.ki = 0.07f;
         PID_speedstruct.target = 0.0f;
         if (AbsF(g_speed_filt) < 2.0f) {
-            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.5f, 0.5f);
+            PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.2f, 0.2f);
             PID_speedstruct.kp = 0.15f;
         } else {
             PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
@@ -456,9 +456,9 @@ void PID_Turn(void)
     float out;
     if(!pid_turn_init)
     {
-        PID_turnstruct.kp=3.7f;   
+        PID_turnstruct.kp=3.0f;   
         PID_turnstruct.ki=0.0f;
-        PID_turnstruct.kd=0.22f;  
+        PID_turnstruct.kd=0.3f;  
         PID_turnstruct.target=0.0f;
         PID_turnstruct.actual=0.0f;
         PID_turnstruct.error=0.0f;
