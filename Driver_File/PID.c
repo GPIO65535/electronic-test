@@ -25,9 +25,13 @@ static uint8_t g_task3_cross_armed = 0;
 static uint8_t g_gray_cnt = 0;
 volatile uint8_t g_task3_state_dbg = 0;
 static float g_task3_stage_dist = 0.0f;
+volatile uint8_t g_gray_cnt_dbg = 0;
+volatile uint16_t g_task3_stage_dist_dbg = 0;
+static float g_turn_brake_filt = 0.0f;
 
-#define TASK3_MIN_DIST_TO_C   480.0f
-#define TASK3_MIN_DIST_TO_D   480.0f
+#define TASK3_MIN_DIST_TO_C   5500.0f
+#define TASK3_MIN_DIST_TO_D   2300.0f
+#define TASK3_MIN_DIST_AFTER_A 10000.0f
 
 static PID_t PID_upstruct;
 static PID_t PID_speedstruct;
@@ -51,6 +55,23 @@ static void Task3_SyncDebugState(void)
     g_task3_state_dbg = (uint8_t)g_task3_state;
 }
 
+static void Task3_SyncDebugValues(void)
+{
+    g_gray_cnt_dbg = g_gray_cnt;
+    if (g_task3_stage_dist <= 0.0f)
+    {
+        g_task3_stage_dist_dbg = 0;
+    }
+    else if (g_task3_stage_dist >= 65535.0f)
+    {
+        g_task3_stage_dist_dbg = 65535;
+    }
+    else
+    {
+        g_task3_stage_dist_dbg = (uint16_t)g_task3_stage_dist;
+    }
+}
+
 static float AbsF(float x)
 {
     return (x >= 0.0f) ? x : -x;
@@ -60,6 +81,7 @@ void PID_SetBaseSpeedRef(float v_ref)
 {
     g_base_v_ref = v_ref;
     Task3_SyncDebugState();
+    Task3_SyncDebugValues();
 }
 
 /**
@@ -281,6 +303,7 @@ static float Get_Grayerror(void)
     uint8_t i;
     uint8_t cnt = 0;
     uint8_t left_on = 0;
+    uint8_t mid_on = 0;
     uint8_t right_on = 0;
     uint8_t raw_cross_state;
     uint8_t current_cross_state;
@@ -308,12 +331,17 @@ static float Get_Grayerror(void)
     }
 
     g_gray_cnt = cnt;
+    Task3_SyncDebugValues();
     current_e = sum / (float)cnt;
 
 #if LINE_IS_LOW
     if ((gray[0] == 0) && (gray[1] == 0))
     {
         left_on = 1;
+    }
+    if ((gray[3] == 0) && (gray[4] == 0))
+    {
+        mid_on = 1;
     }
     if ((gray[6] == 0) && (gray[7] == 0))
     {
@@ -324,6 +352,10 @@ static float Get_Grayerror(void)
     {
         left_on = 1;
     }
+    if ((gray[3] == 1) && (gray[4] == 1))
+    {
+        mid_on = 1;
+    }
     if ((gray[6] == 1) && (gray[7] == 1))
     {
         right_on = 1;
@@ -332,7 +364,7 @@ static float Get_Grayerror(void)
 
     if (g_task_mode == 3)
     {
-        raw_cross_state = (cnt >= 7 && left_on && right_on) ? 1 : 0;
+        raw_cross_state = (cnt >= 6 && left_on && right_on) ? 1 : 0;
         current_cross_state = raw_cross_state;
     }
     else
@@ -351,6 +383,7 @@ static float Get_Grayerror(void)
                 if (g_task3_state == TASK3_WAIT_LEAVE_A)
                 {
                     g_task3_state = TASK3_WAIT_D_PASS;
+                    g_task3_stage_dist = 0.0f;
                     Task3_SyncDebugState();
                 }
             }
@@ -359,19 +392,23 @@ static float Get_Grayerror(void)
         {
             if ((PID_Timebase1ms_Get() - last_cross_ms) > 350)
             {
-                g_cross_line_cnt++;
-                last_cross_ms = PID_Timebase1ms_Get();
-
                 if (g_task3_state == TASK3_WAIT_D_PASS)
                 {
-                    g_task3_state = TASK3_WAIT_C;
-                    g_task3_stage_dist = 0.0f;
-                    Task3_SyncDebugState();
+                    if (g_task3_stage_dist >= TASK3_MIN_DIST_AFTER_A)
+                    {
+                        g_cross_line_cnt++;
+                        last_cross_ms = PID_Timebase1ms_Get();
+                        g_task3_state = TASK3_WAIT_C;
+                        g_task3_stage_dist = 0.0f;
+                        Task3_SyncDebugState();
+                    }
                 }
                 else if (g_task3_state == TASK3_WAIT_C)
                 {
                     if (g_task3_stage_dist >= TASK3_MIN_DIST_TO_C)
                     {
+                        g_cross_line_cnt++;
+                        last_cross_ms = PID_Timebase1ms_Get();
                         g_is_turning_180 = 1;
                         PID_speedstruct.integral = 0.0f;
                         PID_speedstruct.output = 0.0f;
@@ -388,6 +425,8 @@ static float Get_Grayerror(void)
                 {
                     if (g_task3_stage_dist >= TASK3_MIN_DIST_TO_D)
                     {
+                        g_cross_line_cnt++;
+                        last_cross_ms = PID_Timebase1ms_Get();
                         g_is_turning_180 = 1;
                         PID_speedstruct.integral = 0.0f;
                         PID_speedstruct.output = 0.0f;
@@ -402,6 +441,8 @@ static float Get_Grayerror(void)
                 }
                 else if (g_task3_state == TASK3_WAIT_STOP && g_cross_line_cnt >= 3)
                 {
+                    g_cross_line_cnt++;
+                    last_cross_ms = PID_Timebase1ms_Get();
                     g_lap_dist = 0.0f;
                     g_stop_coast_dist = 190.0f;
                     g_stop_target_dist = 230.0f;
@@ -447,6 +488,7 @@ void PID_ClearSpeedState(void)
     g_target_yaw = 0.0f;
     g_task3_cross_armed = 0;
     g_task3_stage_dist = 0.0f;
+    g_turn_brake_filt = 0.0f;
     g_task3_state = TASK3_WAIT_LEAVE_A;
     Task3_SyncDebugState();
 
@@ -476,7 +518,6 @@ void PID_ClearSpeedState(void)
 void PID_Speed(void)
 {
     static uint8_t pid_speed_init = 0;
-    static float turn_brake_filt = 0.0f;
     static uint8_t g_stop_state = 0; // 0: 正常 1: 滑行 2: 刹停
     float alpha = 0.2f;
     float v;
@@ -506,6 +547,7 @@ void PID_Speed(void)
     if (g_task_mode == 3)
     {
         g_task3_stage_dist += AbsF(v);
+        Task3_SyncDebugValues();
     }
 
     if (g_stop_state == 0)
@@ -524,16 +566,16 @@ void PID_Speed(void)
     }
 
     preview_now = Get_TurnPreviewLevel();
-    if (preview_now > turn_brake_filt)
+    if (preview_now > g_turn_brake_filt)
     {
-        turn_brake_filt = turn_brake_filt * 0.6f + preview_now * 0.4f;
+        g_turn_brake_filt = g_turn_brake_filt * 0.6f + preview_now * 0.4f;
     }
     else
     {
-        turn_brake_filt = turn_brake_filt * 0.96f + preview_now * 0.04f;
+        g_turn_brake_filt = g_turn_brake_filt * 0.96f + preview_now * 0.04f;
     }
 
-    speed_target_now = g_base_v_ref * (1.0f - 0.45f * turn_brake_filt);
+    speed_target_now = g_base_v_ref * (1.0f - 0.45f * g_turn_brake_filt);
     if ((g_task_mode == 3) && g_is_turning_180)
     {
         speed_target_now = 0.0f;
@@ -650,6 +692,9 @@ void PID_Turn(void)
 
                 if (g_task3_state == TASK3_TURNING_C)
                 {
+                    PID_speedstruct.integral = 0.0f;
+                    PID_speedstruct.output = 0.0f;
+                    g_turn_brake_filt = 0.0f;
                     g_run_dir = 1;
                     g_task3_state = TASK3_WAIT_D;
                     g_task3_stage_dist = 0.0f;
@@ -657,6 +702,9 @@ void PID_Turn(void)
                 }
                 else if (g_task3_state == TASK3_TURNING_D)
                 {
+                    PID_speedstruct.integral = 0.0f;
+                    PID_speedstruct.output = 0.0f;
+                    g_turn_brake_filt = 0.0f;
                     g_run_dir = 0;
                     g_task3_state = TASK3_WAIT_STOP;
                     g_task3_stage_dist = 0.0f;

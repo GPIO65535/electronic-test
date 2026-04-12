@@ -38,6 +38,8 @@ extern volatile uint8_t g_task_mode;
 extern volatile uint8_t g_cross_line_cnt;
 extern volatile uint8_t g_is_turning_180;
 extern volatile uint8_t g_task3_state_dbg;
+extern volatile uint8_t g_gray_cnt_dbg;
+extern volatile uint16_t g_task3_stage_dist_dbg;
 
 void ALL_Init(void);
 float PID_Cal(PID_t *pid, float dt);

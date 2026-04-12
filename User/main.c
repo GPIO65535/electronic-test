@@ -16,21 +16,19 @@ int main(void)
         key = KEY_GET();
     }
     // 按下 KEY1 启动顺时针模式：改变里程，并进入方向标志位1
-    if(key == 1) {
+    if(key == 3) {
         g_stop_target_dist = 33000.0f;
         g_stop_coast_dist = 31000.0f;
         g_run_dir = 1; // 1:顺时针
         g_task_mode = 1;
         start_speed_ref = 12.0f;
-    } else if(key == 3) {
+    } else if(key == 1) {
         // --- 核心考题模式逻辑 ---
         g_run_dir = 0;              // 从A逆时针启动
         g_task_mode = 3;            // 标记进入考题模式
         g_cross_line_cnt = 0;          // 计数清零
-        
-        // 初始里程设定为极大值，直到第7次全黑（B线）再激活停车系统
-        g_stop_coast_dist = 999999.0f;
-        g_stop_target_dist = 999999.0f;
+        g_stop_coast_dist = 40000.0f;
+        g_stop_target_dist = 43000.0f;
         start_speed_ref = 12.0f;
     } else {
         // 默认逆时针启动
@@ -43,10 +41,6 @@ int main(void)
     PID_ClearSpeedState(); // 启动前清空速度环状态，防止积分初始值异常导致的开机抖动
     PID_SetBaseSpeedRef(0.0f);
     start_ms = PID_Timebase1ms_Get();
-    // OLED_ShowString(1, 1, "M:");
-    // OLED_ShowString(1, 9, "C:");
-    // OLED_ShowString(2, 1, "T:");
-    // OLED_ShowString(2, 9, "D:");
     while(1)
     {
         if (!start_delay_done && (PID_Timebase1ms_Get() - start_ms >= 500))
@@ -55,17 +49,7 @@ int main(void)
             PID_SetBaseSpeedRef(start_speed_ref);
             start_delay_done = 1;
         }
-        // static uint32_t oled_tick = 0;
-        // if (PID_Timebase1ms_Get() - oled_tick >= 150)
-        // {
-        //     oled_tick = PID_Timebase1ms_Get();
-        //     OLED_ShowString(3, 1, "S:");
-        //     OLED_ShowNum(1, 3, g_task_mode, 1);
-        //     OLED_ShowNum(1, 11, g_cross_line_cnt, 1);
-        //     OLED_ShowNum(2, 3, g_is_turning_180, 1);
-        //     OLED_ShowNum(2, 11, g_run_dir, 1);
-        //     OLED_ShowNum(3, 3, g_task3_state_dbg, 1);
-        // }
+
         if(g_flag_turn)
         {
             g_flag_turn=0;
