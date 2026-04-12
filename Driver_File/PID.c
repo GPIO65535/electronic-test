@@ -30,8 +30,8 @@ volatile uint16_t g_task3_stage_dist_dbg = 0;
 static float g_turn_brake_filt = 0.0f;
 
 #define TASK3_MIN_DIST_TO_C   5500.0f
-#define TASK3_MIN_DIST_TO_D   2300.0f
-#define TASK3_MIN_DIST_AFTER_A 10000.0f
+#define TASK3_MIN_DIST_TO_D   3300.0f
+#define TASK3_MIN_DIST_AFTER_A 11000.0f
 
 static PID_t PID_upstruct;
 static PID_t PID_speedstruct;
@@ -625,7 +625,7 @@ void PID_Speed(void)
 
     PID_speedstruct.actual = g_speed_filt;
     pid_output = PID_Cal(&PID_speedstruct, DT_SPEED);
-    g_target_pitch_from_speed = PID_Limit(pid_output, -3.5f, 3.5f);
+    g_target_pitch_from_speed = PID_Limit(pid_output, -4.0f, 4.0f);
 }
 
 /**
@@ -652,7 +652,7 @@ void PID_Turn(void)
 
         PID_yawturnstruct.kp = 2.3f;
         PID_yawturnstruct.ki = 0.0f;
-        PID_yawturnstruct.kd = 0.25f;
+        PID_yawturnstruct.kd = 0.3f;
         PID_yawturnstruct.target = 0.0f;
         PID_yawturnstruct.actual = 0.0f;
         PID_yawturnstruct.error = 0.0f;
@@ -680,7 +680,7 @@ void PID_Turn(void)
         PID_yawturnstruct.target = 0.0f;
         PID_yawturnstruct.actual = error;
         out = PID_Cal(&PID_yawturnstruct, DT_TURN);
-        g_turn_output = PID_Limit(out, -60.0f, 60.0f);
+        g_turn_output = PID_Limit(out, -50.0f, 50.0f);
 
         if (AbsF(error) < 5.0f)
         {
