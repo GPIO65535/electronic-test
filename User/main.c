@@ -9,6 +9,9 @@ int main(void)
     Timer_Init();
     OLED_Init();
     uint8_t key = 0;
+    float start_speed_ref = 12.0f;
+    uint8_t start_delay_done = 0;
+    uint32_t start_ms = 0;
     while(!key) {
         key = KEY_GET();
     }
@@ -18,6 +21,7 @@ int main(void)
         g_stop_coast_dist = 31000.0f;
         g_run_dir = 1; // 1:顺时针
         g_task_mode = 1;
+        start_speed_ref = 12.0f;
     } else if(key == 3) {
         // --- 核心考题模式逻辑 ---
         g_run_dir = 0;              // 从A逆时针启动
@@ -27,21 +31,30 @@ int main(void)
         // 初始里程设定为极大值，直到第7次全黑（B线）再激活停车系统
         g_stop_coast_dist = 999999.0f;
         g_stop_target_dist = 999999.0f;
+        start_speed_ref = 12.0f;
     } else {
         // 默认逆时针启动
         g_run_dir = 0;
         g_task_mode = 0;
-        g_stop_target_dist = 30350.0f;
-        g_stop_coast_dist = 28000.0f;
+        g_stop_target_dist = 30300.0f;
+        g_stop_coast_dist = 27000.0f;
+        start_speed_ref = 12.0f;
     }
     PID_ClearSpeedState(); // 启动前清空速度环状态，防止积分初始值异常导致的开机抖动
-    PID_SetBaseSpeedRef(12.0f);
+    PID_SetBaseSpeedRef(0.0f);
+    start_ms = PID_Timebase1ms_Get();
     // OLED_ShowString(1, 1, "M:");
     // OLED_ShowString(1, 9, "C:");
     // OLED_ShowString(2, 1, "T:");
     // OLED_ShowString(2, 9, "D:");
     while(1)
     {
+        if (!start_delay_done && (PID_Timebase1ms_Get() - start_ms >= 500))
+        {
+            PID_ClearSpeedState();
+            PID_SetBaseSpeedRef(start_speed_ref);
+            start_delay_done = 1;
+        }
         // static uint32_t oled_tick = 0;
         // if (PID_Timebase1ms_Get() - oled_tick >= 150)
         // {
