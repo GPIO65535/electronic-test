@@ -202,7 +202,7 @@ void PID_Up(void)
     {
         PID_upstruct.kp = 9.7f * 0.6f;
         PID_upstruct.ki = 0.0f;
-        PID_upstruct.kd = 0.14f * 0.6f;
+        PID_upstruct.kd = 0.15f * 0.6f;
         PID_upstruct.target = 0.0f;
         PID_upstruct.actual = 0.0f;
         PID_upstruct.error = 0.0f;
@@ -524,7 +524,7 @@ void PID_Speed(void)
     if (!pid_speed_init)
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.13f / 200.0f;
+        PID_speedstruct.ki = 0.11f / 200.0f;
         PID_speedstruct.kd = 0.0f;
         PID_speedstruct.target = 0.0f;
         PID_speedstruct.actual = 0.0f;
@@ -600,14 +600,14 @@ void PID_Speed(void)
     else if (g_stop_state == 1)
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.13f / 200.0f;
+        PID_speedstruct.ki = 0.11f / 200.0f;
         PID_speedstruct.target = speed_target_now * 0.5f;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
     else
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.13f / 200.0f;
+        PID_speedstruct.ki = 0.11f / 200.0f;
         PID_speedstruct.target = speed_target_now;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
