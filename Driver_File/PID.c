@@ -213,7 +213,7 @@ void PID_Up(void)
         pid_up_init = 1;
     }
 
-    PID_upstruct.target = g_target_pitch_from_speed-0.3f;
+    PID_upstruct.target = g_target_pitch_from_speed;
     PID_upstruct.actual = Pitch;
 
     dt_used = PID_Limit(g_up_dt, DT_UP_MIN, DT_UP_MAX);
@@ -571,7 +571,7 @@ void PID_Speed(void)
         g_turn_brake_filt = g_turn_brake_filt * 0.96f + preview_now * 0.04f;
     }
 
-    speed_target_now = g_base_v_ref * (1.0f - 0.45f * g_turn_brake_filt);
+    speed_target_now = g_base_v_ref * (1.0f - 0.50f * g_turn_brake_filt);
     if ((g_task_mode == 3) && g_is_turning_180)
     {
         speed_target_now = 0.0f;
@@ -579,13 +579,13 @@ void PID_Speed(void)
 
     if (g_stop_state == 2)
     {
-        PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.07f;
+        PID_speedstruct.kp = 0.25f;
+        PID_speedstruct.ki = 0.03f;
         PID_speedstruct.target = 0.0f;
         if (AbsF(g_speed_filt) < 2.0f)
         {
             PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -0.2f, 0.2f);
-            PID_speedstruct.kp = 0.15f;
+            PID_speedstruct.kp = 0.14f;
             if (AbsF(g_speed_filt) < 1.0f)
             {
                 PID_speedstruct.integral = 0.0f;
