@@ -28,10 +28,12 @@ static float g_task3_stage_dist = 0.0f;
 volatile uint8_t g_gray_cnt_dbg = 0;
 volatile uint16_t g_task3_stage_dist_dbg = 0;
 static float g_turn_brake_filt = 0.0f;
+static uint8_t g_cross_active = 0;
 
 #define TASK3_MIN_DIST_TO_C   5500.0f
-#define TASK3_MIN_DIST_TO_D   3300.0f
+#define TASK3_MIN_DIST_TO_D   1200.0f
 #define TASK3_MIN_DIST_AFTER_A 11000.0f
+#define TASK3_MIN_DIST_TO_STOP 3000.0f
 
 static PID_t PID_upstruct;
 static PID_t PID_speedstruct;
@@ -198,9 +200,9 @@ void PID_Up(void)
 
     if (!pid_up_init)
     {
-        PID_upstruct.kp = 10.5f * 0.6f;
+        PID_upstruct.kp = 9.7f * 0.6f;
         PID_upstruct.ki = 0.0f;
-        PID_upstruct.kd = 0.13f * 0.6f;
+        PID_upstruct.kd = 0.14f * 0.6f;
         PID_upstruct.target = 0.0f;
         PID_upstruct.actual = 0.0f;
         PID_upstruct.error = 0.0f;
@@ -339,10 +341,6 @@ static float Get_Grayerror(void)
     {
         left_on = 1;
     }
-    if ((gray[3] == 0) && (gray[4] == 0))
-    {
-        mid_on = 1;
-    }
     if ((gray[6] == 0) && (gray[7] == 0))
     {
         right_on = 1;
@@ -351,10 +349,6 @@ static float Get_Grayerror(void)
     if ((gray[0] == 1) && (gray[1] == 1))
     {
         left_on = 1;
-    }
-    if ((gray[3] == 1) && (gray[4] == 1))
-    {
-        mid_on = 1;
     }
     if ((gray[6] == 1) && (gray[7] == 1))
     {
@@ -441,34 +435,35 @@ static float Get_Grayerror(void)
                 }
                 else if (g_task3_state == TASK3_WAIT_STOP && g_cross_line_cnt >= 3)
                 {
-                    g_cross_line_cnt++;
-                    last_cross_ms = PID_Timebase1ms_Get();
-                    g_lap_dist = 0.0f;
-                    g_stop_coast_dist = 190.0f;
-                    g_stop_target_dist = 230.0f;
+                    if (g_task3_stage_dist >= TASK3_MIN_DIST_TO_STOP)
+                    {
+                        g_cross_line_cnt++;
+                        last_cross_ms = PID_Timebase1ms_Get();
+                        g_lap_dist = 0.0f;
+                        g_stop_coast_dist = 190.0f;
+                        g_stop_target_dist = 230.0f;
+                    }
                 }
             }
         }
     }
 
     last_cross_state = current_cross_state;
+    g_cross_active = (left_on && right_on) ? 1 : 0;
 
     if (left_on && right_on)
     {
 
-            current_e = PID_Limit(current_e, -0.75f, 0.75f);
-    
-
-        if ((current_e - last_e) > 1.0f)
+        current_e = PID_Limit(current_e, -0.75f, 0.75f);
+        if ((current_e - last_e) > 0.5f)
         {
-            current_e = last_e + 1.0f;
+            current_e = last_e + 0.5f;
         }
-        else if ((current_e - last_e) < -1.0f)
+        else if ((current_e - last_e) < -0.5f)
         {
-            current_e = last_e - 1.0f;
+            current_e = last_e - 0.5f;
         }
     }
-
     last_e = current_e;
     return last_e;
 }
@@ -489,6 +484,7 @@ void PID_ClearSpeedState(void)
     g_task3_cross_armed = 0;
     g_task3_stage_dist = 0.0f;
     g_turn_brake_filt = 0.0f;
+    g_cross_active = 0;
     g_task3_state = TASK3_WAIT_LEAVE_A;
     Task3_SyncDebugState();
 
@@ -528,7 +524,7 @@ void PID_Speed(void)
     if (!pid_speed_init)
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.15f / 200.0f;
+        PID_speedstruct.ki = 0.13f / 200.0f;
         PID_speedstruct.kd = 0.0f;
         PID_speedstruct.target = 0.0f;
         PID_speedstruct.actual = 0.0f;
@@ -604,14 +600,14 @@ void PID_Speed(void)
     else if (g_stop_state == 1)
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.15f / 200.0f;
+        PID_speedstruct.ki = 0.13f / 200.0f;
         PID_speedstruct.target = speed_target_now * 0.5f;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
     else
     {
         PID_speedstruct.kp = 0.3f;
-        PID_speedstruct.ki = 0.15f / 200.0f;
+        PID_speedstruct.ki = 0.13f / 200.0f;
         PID_speedstruct.target = speed_target_now;
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
@@ -625,7 +621,7 @@ void PID_Speed(void)
 
     PID_speedstruct.actual = g_speed_filt;
     pid_output = PID_Cal(&PID_speedstruct, DT_SPEED);
-    g_target_pitch_from_speed = PID_Limit(pid_output, -4.0f, 4.0f);
+    g_target_pitch_from_speed = PID_Limit(pid_output, -3.5f, 3.5f);
 }
 
 /**
