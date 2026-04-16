@@ -29,6 +29,7 @@ volatile uint8_t g_gray_cnt_dbg = 0;
 volatile uint16_t g_task3_stage_dist_dbg = 0;
 static float g_turn_brake_filt = 0.0f;
 static uint8_t g_cross_active = 0;
+static uint8_t g_task3_recover_ticks = 0;
 
 #define TASK3_MIN_DIST_TO_C   5500.0f
 #define TASK3_MIN_DIST_TO_D   1200.0f
@@ -451,19 +452,19 @@ static float Get_Grayerror(void)
     last_cross_state = current_cross_state;
     g_cross_active = (left_on && right_on) ? 1 : 0;
 
-    if (left_on && right_on)
+    if (left_on && right_on && cnt>=6)
     {
 
-        current_e = PID_Limit(current_e, -0.75f, 0.75f);
-        if ((current_e - last_e) > 0.5f)
+        current_e = PID_Limit(current_e, -1.0f, 1.0f); 
+           if ((current_e - last_e) > 2.6f)
         {
-            current_e = last_e + 0.5f;
+            current_e = last_e + 2.6f;
         }
-        else if ((current_e - last_e) < -0.5f)
+        else if ((current_e - last_e) < -2.6f)
         {
-            current_e = last_e - 0.5f;
+            current_e = last_e - 2.6f;
         }
-    }
+    }    
     last_e = current_e;
     return last_e;
 }
@@ -485,6 +486,7 @@ void PID_ClearSpeedState(void)
     g_task3_stage_dist = 0.0f;
     g_turn_brake_filt = 0.0f;
     g_cross_active = 0;
+    g_task3_recover_ticks = 0;
     g_task3_state = TASK3_WAIT_LEAVE_A;
     Task3_SyncDebugState();
 
@@ -571,16 +573,21 @@ void PID_Speed(void)
         g_turn_brake_filt = g_turn_brake_filt * 0.96f + preview_now * 0.04f;
     }
 
-    speed_target_now = g_base_v_ref * (1.0f - 0.50f * g_turn_brake_filt);
+    speed_target_now = g_base_v_ref * (1.0f - 0.40f * g_turn_brake_filt);
     if ((g_task_mode == 3) && g_is_turning_180)
     {
         speed_target_now = 0.0f;
+    }
+    else if ((g_task_mode == 3) && (g_task3_recover_ticks > 0))
+    {
+        float recover_scale = 0.50f + 0.50f * (20.0f - (float)g_task3_recover_ticks) / 20.0f;
+        speed_target_now *= PID_Limit(recover_scale, 0.50f, 1.0f);
     }
 
     if (g_stop_state == 2)
     {
         g_turn_output = 0.0f;
-        PID_speedstruct.kp = 0.25f;
+        PID_speedstruct.kp = 0.35f;
         PID_speedstruct.ki = 0.03f;
         PID_speedstruct.target = 0.0f;
         if (AbsF(g_speed_filt) < 2.0f)
@@ -613,6 +620,11 @@ void PID_Speed(void)
         PID_speedstruct.integral = PID_Limit(PID_speedstruct.integral, -15.0f, 15.0f);
     }
 
+    if ((g_task_mode == 3) && (g_task3_recover_ticks > 0))
+    {
+        PID_speedstruct.ki = 0.05f / 200.0f;
+    }
+
     if (g_base_v_ref == 0.0f)
     {
         PID_speedstruct.integral = 0.0f;
@@ -623,6 +635,11 @@ void PID_Speed(void)
     PID_speedstruct.actual = g_speed_filt;
     pid_output = PID_Cal(&PID_speedstruct, DT_SPEED);
     g_target_pitch_from_speed = PID_Limit(pid_output, -3.5f, 3.5f);
+    if ((g_task_mode == 3) && (g_task3_recover_ticks > 0))
+    {
+        g_target_pitch_from_speed = PID_Limit(g_target_pitch_from_speed, -2.2f, 2.2f);
+        g_task3_recover_ticks--;
+    }
 }
 
 /**
@@ -677,7 +694,7 @@ void PID_Turn(void)
         PID_yawturnstruct.target = 0.0f;
         PID_yawturnstruct.actual = error;
         out = PID_Cal(&PID_yawturnstruct, DT_TURN);
-        g_turn_output = PID_Limit(out, -50.0f, 50.0f);
+        g_turn_output = PID_Limit(out, -40.0f, 40.0f);
 
         if (AbsF(error) < 5.0f)
         {
@@ -691,7 +708,11 @@ void PID_Turn(void)
                 {
                     PID_speedstruct.integral = 0.0f;
                     PID_speedstruct.output = 0.0f;
+                    g_turn_output = 0.0f;
+                    PID_turnstruct.integral = 0.0f;
+                    PID_turnstruct.output = 0.0f;
                     g_turn_brake_filt = 0.0f;
+                    g_task3_recover_ticks = 20;
                     g_run_dir = 1;
                     g_task3_state = TASK3_WAIT_D;
                     g_task3_stage_dist = 0.0f;
@@ -701,7 +722,11 @@ void PID_Turn(void)
                 {
                     PID_speedstruct.integral = 0.0f;
                     PID_speedstruct.output = 0.0f;
+                    g_turn_output = 0.0f;
+                    PID_turnstruct.integral = 0.0f;
+                    PID_turnstruct.output = 0.0f;
                     g_turn_brake_filt = 0.0f;
+                    g_task3_recover_ticks = 20;
                     g_run_dir = 0;
                     g_task3_state = TASK3_WAIT_STOP;
                     g_task3_stage_dist = 0.0f;

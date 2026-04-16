@@ -9,26 +9,56 @@ int main(void)
     Timer_Init();
     //OLED_Init();
     uint8_t key = 0;
-    float start_speed_ref = 13.0f;
+    uint8_t key1_double_press = 0;
+    float start_speed_ref = 25.0f;
     uint8_t start_delay_done = 0;
     uint32_t start_ms = 0;
     while(!key) {
-        key = KEY_GET();
+        if (GPIO_ReadInputDataBit(KEY1_PORT, KEY1_PIN) == 0) {
+            uint16_t key1_wait_ms = 0;
+            while (GPIO_ReadInputDataBit(KEY1_PORT, KEY1_PIN) == 0) {
+                Delay_ms(10);
+            }
+            key = 1;
+            while (key1_wait_ms < 350) {
+                if (GPIO_ReadInputDataBit(KEY1_PORT, KEY1_PIN) == 0) {
+                    while (GPIO_ReadInputDataBit(KEY1_PORT, KEY1_PIN) == 0) {
+                        Delay_ms(10);
+                    }
+                    key1_double_press = 1;
+                    break;
+                }
+                Delay_ms(10);
+                key1_wait_ms += 10;
+            }
+        } else {
+            key = KEY_GET();
+        }
     }
-    // 按下 KEY1 启动顺时针模式：改变里程，并进入方向标志位1
+    // 按key1一次第一问，两次发挥第一问
     if(key == 1) {
-        start_speed_ref = -0.5f;
+        if (key1_double_press) {
+            g_run_dir = 0;              
+            g_task_mode = 3;            
+            g_cross_line_cnt = 0;       
+            g_stop_coast_dist = 40000.0f;
+            g_stop_target_dist = 41000.0f;
+            start_speed_ref = 25.0f;
+        } else {
+            start_speed_ref = -0.35f;
+        }
+        //key3:第三问
     } else if(key == 3) {
-        g_run_dir = 1;              // 从A顺时针启动
-        g_stop_target_dist = 32800.0f;
-        g_stop_coast_dist = 31500.0f;
-        start_speed_ref = 10.0f;
-    } else {
-        // 默认逆时针启动
+        g_run_dir = 1;              
+        g_stop_target_dist = 33230.0f;
+        g_stop_coast_dist = 32000.0f;
+        start_speed_ref = 25.0f;
+        //key2:第二问
+    } else {    
         g_run_dir = 0;
-        g_stop_target_dist = 30000.0f;
+        g_stop_target_dist = 29850.0f;
         g_stop_coast_dist = 27000.0f;
-        start_speed_ref = 10.0f;
+        start_speed_ref = 25.0f;
     }
     PID_ClearSpeedState(); // 启动前清空速度环状态，防止积分初始值异常导致的开机抖动
     PID_SetBaseSpeedRef(0.0f);
