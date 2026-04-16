@@ -579,6 +579,7 @@ void PID_Speed(void)
 
     if (g_stop_state == 2)
     {
+        g_turn_output = 0.0f;
         PID_speedstruct.kp = 0.25f;
         PID_speedstruct.ki = 0.03f;
         PID_speedstruct.target = 0.0f;
